@@ -1,6 +1,7 @@
 import sqlite3
 import pandas as pd
 
+
 def create_table():
     conn = sqlite3.connect('database/stock.db')
     cursor = conn.cursor()
@@ -23,7 +24,7 @@ def create_table():
     conn.close()
 
 
-def insert_data(data):
+def insert_data(data):  # 把資料丟進去資料庫
     conn = sqlite3.connect('database/stock.db')
     cursor = conn.cursor()
     sql = """
@@ -41,7 +42,7 @@ def insert_data(data):
         dividends = excluded.dividends,
         stock_splits = excluded.stock_splits;
     """
-    data_to_insert = list(data.itertuples(index=False, name=None))  #executemany可以直接用
+    data_to_insert = list(data.itertuples(index=False, name=None))  # executemany可以直接用
     cursor.executemany(sql, data_to_insert)
     conn.commit()
     conn.close()
@@ -73,3 +74,17 @@ def select_data(ticker):
 
     finally:
         conn.close()
+
+
+def get_all_tickers():  # 抓出所有股票名字
+    conn = sqlite3.connect('database/stock.db')
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT DISTINCT ticker
+        FROM price_daily
+    """)
+
+    tickers = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return tickers
