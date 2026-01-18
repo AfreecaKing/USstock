@@ -44,6 +44,7 @@ def insert_ticker(ticker):  # 抓個股資料
     df = ticker_obj.history(period="max")
     if df.empty:
         print(f"⚠️ No data for {ticker}")
+        return False
     else:
         df = df.reset_index()
         df['ticker'] = ticker
@@ -61,3 +62,4 @@ def insert_ticker(ticker):  # 抓個股資料
                  'volume', 'dividends', 'stock_splits', 'ticker']]
         df['date'] = df['date'].dt.strftime('%Y-%m-%d')
         db.insert_data(df)
+        return True

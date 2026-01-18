@@ -1,8 +1,9 @@
 import sqlite3
 import pandas as pd
-
+import os
 
 def create_table():
+    os.makedirs('./database', exist_ok=True)
     conn = sqlite3.connect('database/stock.db')
     cursor = conn.cursor()
     cursor.execute('''
