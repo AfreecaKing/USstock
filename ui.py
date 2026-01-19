@@ -48,6 +48,7 @@ class StockApp:
         self.current_frame = self.main_frame
         # 🔁 頁面歷史（stack）
         self.frame_stack = []
+        db.create_table()
 
     # =============================
     # 通用 Frame 切換
@@ -101,7 +102,7 @@ class StockApp:
         tk.Button(
             self.insert_frame,
             text="返回",
-            command=self.back
+            command=self.back_to_main
         ).pack(pady=5)
 
         self.label_result = tk.Label(self.insert_frame, text="")
@@ -177,7 +178,7 @@ class StockApp:
         tk.Button(
             self.name_frame,
             text="返回",
-            command=self.back
+            command=self.back_to_main
         ).pack(pady=10)
 
         self.show_frame(self.name_frame)
