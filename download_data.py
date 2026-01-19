@@ -33,7 +33,6 @@ def update_all():
             df['date'] = df['date'].dt.strftime('%Y-%m-%d')
             db.insert_data(df)
             print(f"✅ {ticker} updated ({len(df)} rows total)")
-
         except Exception as e:
             print(f"❌ {ticker} failed: {e}")
 
