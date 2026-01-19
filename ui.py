@@ -285,27 +285,45 @@ class StockApp:
         self.ax.clear()
         df = self.df.copy()
 
+        # ===== 先算好 MA =====
+        if len(df) >= 20:
+            df['MA20'] = df['close'].rolling(20).mean()  # 月線
+        if len(df) >= 60:
+            df['MA60'] = df['close'].rolling(60).mean()  # 季線
+
         # ===== 時間區間過濾 =====
         if period != "ALL":
-            end_date = df["date"].max() - pd.DateOffset(months=self.time_offset * (
-                1 if period == "1M" else 6 if period == "6M" else 12 if period == "1Y" else 0))
+            end_date = df["date"].max()
+            # 根據偏移量往前平移
             if period == "1M":
+                end_date -= pd.DateOffset(months=self.time_offset)
                 start_date = end_date - pd.DateOffset(months=1)
             elif period == "6M":
+                end_date -= pd.DateOffset(months=6 * self.time_offset)
                 start_date = end_date - pd.DateOffset(months=6)
             elif period == "1Y":
+                end_date -= pd.DateOffset(years=self.time_offset)
                 start_date = end_date - pd.DateOffset(years=1)
             df = df[(df["date"] > start_date) & (df["date"] <= end_date)]
 
         # ===== 畫圖 =====
         if chart_type == "price":
-            self.ax.plot(df["date"], df["close"])
-            self.ax.set_title(f"{self.ticker} price ({period})")
+            self.ax.plot(df["date"], df["close"], label="收盤價", color='blue')
+            if 'MA20' in df:
+                self.ax.plot(df["date"], df['MA20'], label="月線(MA20)", color='orange')
+            if 'MA60' in df:
+                self.ax.plot(df["date"], df['MA60'], label="季線(MA60)", color='green')
+
+            self.ax.set_title(f"{self.ticker} 股價走勢 ({period})")
             self.ax.set_ylabel("Price")
+            self.ax.legend()
+
         elif chart_type == "pe":
-            self.ax.text(0.5, 0.5, "本益比尚未實作", ha="center", va="center", transform=self.ax.transAxes)
+            self.ax.text(0.5, 0.5, "本益比尚未實作",
+                         ha="center", va="center", transform=self.ax.transAxes)
         elif chart_type == "revenue":
-            self.ax.text(0.5, 0.5, "營收尚未實作", ha="center", va="center", transform=self.ax.transAxes)
+            self.ax.text(0.5, 0.5, "營收尚未實作",
+                         ha="center", va="center", transform=self.ax.transAxes)
 
         self.ax.set_xlabel("Date")
         self.figure.autofmt_xdate()
