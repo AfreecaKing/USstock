@@ -152,13 +152,13 @@ def fetch_and_store_fundamentals(ticker):
             "year": [int(y) for y in revenue.keys()],
             "revenue": [int(revenue[y]) for y in revenue],
             "cogs": [int(cogs.get(y, 0)) for y in revenue],
-            "gross_margin": [round(float(gross_margin.get(y, 0)), 2) for y in revenue],
+            "gross_margin": [round(float(gross_margin.get(y, 0)), 4) for y in revenue],
             "operating_income": [int(operating_income.get(y, 0)) for y in revenue],
-            "operating_margin": [round(float(operating_margin.get(y, 0)), 2) for y in revenue],
+            "operating_margin": [round(float(operating_margin.get(y, 0)), 4) for y in revenue],
             "net_income": [int(net_income.get(y, 0)) for y in revenue],
-            "net_margin": [round(float(net_margin.get(y, 0)), 2) for y in revenue],
+            "net_margin": [round(float(net_margin.get(y, 0)), 4) for y in revenue],
             "shares": [int(shares.get(y, 0)) for y in revenue],
-            "eps": [round(float(eps.get(y, 0)), 2) for y in revenue],
+            "eps": [round(float(eps.get(y, 0)), 4) for y in revenue],
         })
 
         # 存入資料庫

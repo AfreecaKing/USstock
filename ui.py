@@ -168,6 +168,12 @@ class StockApp:
                 command=lambda t=ticker_name: self.view_ticker(t)
             ).pack(side=tk.LEFT, padx=5)
 
+            tk.Button(
+                row,
+                text="基本面分析",
+                command=lambda t=ticker_name: self.view_fundamentals(t)
+            ).pack(side=tk.LEFT, padx=5)
+
             # 🔴 刪除按鈕
             tk.Button(
                 row,
@@ -213,7 +219,6 @@ class StockApp:
                   command=lambda: self.set_chart_type("price")).pack(side=tk.LEFT, padx=5)
         tk.Button(control_frame, text="本益比",
                   command=lambda: self.set_chart_type("pe")).pack(side=tk.LEFT, padx=5)
-
 
         # ===== 時間區間控制 =====
         period_frame = tk.Frame(self.chart_frame)
@@ -323,9 +328,130 @@ class StockApp:
             self.ax.text(0.5, 0.5, "本益比尚未實作",
                          ha="center", va="center", transform=self.ax.transAxes)
 
-
         self.ax.set_xlabel("Date")
         self.figure.autofmt_xdate()
+        self.canvas.draw()
+
+    # =============================
+    # 基本面分析
+    # =============================
+    def view_fundamentals(self, ticker):
+        self.ticker = ticker
+        df = db.select_fundamentals(ticker)
+
+        if df.empty:
+            messagebox.showinfo("無資料", f"{ticker} 尚無基本面資料")
+            return
+
+        # 初始化
+        self.fund_frame = tk.Frame(self.root)
+        tk.Label(
+            self.fund_frame,
+            text=f"{ticker} Fundamentals",
+            font=("Arial", 16)
+        ).pack(pady=5)
+        # ===== 圖表切換按鈕 =====
+        control_frame = tk.Frame(self.fund_frame)
+        control_frame.pack(pady=5)
+
+        tk.Button(control_frame, text="Revenue",
+                  command=lambda: self.draw_fundamental_chart(df, "revenue", "Revenue (Billion USD)", scale=1e-9)).pack(
+            side=tk.LEFT, padx=3)
+        tk.Button(control_frame, text="EPS",
+                  command=lambda: self.draw_fundamental_chart(df, "eps", "EPS (USD)")).pack(side=tk.LEFT, padx=3)
+        tk.Button(control_frame, text="Gross Margin",
+                  command=lambda: self.draw_fundamental_chart(df, "gross_margin", "Gross Margin (%)",
+                                                              is_percent=True)).pack(side=tk.LEFT, padx=3)
+        tk.Button(control_frame, text="Operating Margin",
+                  command=lambda: self.draw_fundamental_chart(df, "operating_margin", "Operating Margin (%)",
+                                                              is_percent=True)).pack(side=tk.LEFT, padx=3)
+        tk.Button(control_frame, text="Net Margin",
+                  command=lambda: self.draw_fundamental_chart(df, "net_margin", "Net Margin (%)",
+                                                              is_percent=True)).pack(
+            side=tk.LEFT, padx=3)
+        # 圖表
+        self.figure = plt.Figure(figsize=(7, 4))
+        self.ax = self.figure.add_subplot(111)
+        self.canvas = FigureCanvasTkAgg(self.figure, self.fund_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+
+        # 返回按鈕
+        tk.Button(self.fund_frame, text="返回", command=self.back).pack(pady=5)
+
+        # 顯示頁面
+        self.show_frame(self.fund_frame)
+
+        # 預設顯示 Revenue
+        self.draw_fundamental_chart(df, "revenue", "Revenue (Billion USD)", scale=1e-9)
+
+    def draw_fundamental_chart(self, df, col, ylabel=None, scale=1, is_percent=False):
+        """
+        通用基本面柱狀圖畫法
+        df: DataFrame, 必須有 "year" 欄位
+        col: 欄位名稱 (Revenue, EPS, GrossMargin, OperatingMargin, NetMargin)
+        ylabel: Y 軸文字
+        scale: 數值縮放，例如 Revenue 用 1e-9 轉成 Billion
+        is_percent: True -> 顯示為百分比
+        """
+        self.ax.clear()
+
+        df = df.sort_values("year").copy()
+        x = df["year"]
+        y = df[col] * scale
+
+        bars = self.ax.bar(x, y, color="skyblue" if not is_percent else "lightgreen")
+
+        # 軸設定
+        self.ax.set_xlabel("Year")
+        self.ax.set_ylabel(ylabel if ylabel else col)
+        self.ax.set_title(f"{self.ticker} {col}")
+        self.ax.set_xticks(x)
+        self.ax.set_xticklabels(x, rotation=45)
+
+        # 在柱子上顯示數值
+        if col.lower() == "revenue":
+            # Revenue 顯示 YoY
+            df["yoy"] = df["revenue"].pct_change() * 100  # 百分比
+            for bar, yoy in zip(bars, df["yoy"]):
+                if pd.isna(yoy):
+                    label = "—"
+                else:
+                    label = f"{yoy:+.1f}%"
+                y_pos = bar.get_height()
+                va = "bottom" if y_pos >= 0 else "top"
+                self.ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    y_pos,
+                    label,
+                    ha="center",
+                    va=va,
+                    fontsize=9,
+                    color="red" if pd.notna(yoy) and yoy < 0 else "black"
+                )
+        else:
+            # EPS / Margin 顯示實際數值
+            for bar, val in zip(bars, y):
+                if pd.isna(val):
+                    label = "—"
+                else:
+                    if is_percent:
+                        label = f"{val:.2f}%"
+                    else:
+                        label = f"{val:.3f}"
+                y_pos = bar.get_height()
+                va = "bottom" if y_pos >= 0 else "top"
+                self.ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    y_pos,
+                    label,
+                    ha="center",
+                    va=va,
+                    fontsize=9,
+                    color="black"
+                )
+
+        self.figure.tight_layout()
         self.canvas.draw()
 
     # =============================

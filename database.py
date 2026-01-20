@@ -97,7 +97,7 @@ def insert_fundamentals(df):
     conn.close()
 
 
-def select_price(ticker):
+def select_fundamentals(ticker):
     """
     取得指定股票的歷史股價資料，回傳 DataFrame
 
@@ -108,6 +108,23 @@ def select_price(ticker):
         pd.DataFrame: 包含 date, open, high, low, close, volume, dividends, stock_splits
     """
 
+    conn = sqlite3.connect('database/stock.db')
+
+    try:
+        sql = f"""
+        SELECT ticker, year, revenue, cogs, gross_margin,operating_income, operating_margin, net_income, net_margin,shares, eps
+        FROM fundamentals_annual
+        WHERE ticker = ?
+        ORDER BY year
+        """
+        df = pd.read_sql_query(sql, conn, params=(ticker,))
+        return df
+
+    finally:
+        conn.close()
+
+
+def select_price(ticker):
     conn = sqlite3.connect('database/stock.db')
 
     try:
