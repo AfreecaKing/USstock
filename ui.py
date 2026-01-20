@@ -41,13 +41,14 @@ class StockApp:
             text="更新股票資料",
             width=15,
             height=2,
-            command=download.update_all
+            command=download.update_all_ticker
         ).pack(pady=10)
 
         # 目前顯示的頁面
         self.current_frame = self.main_frame
         # 🔁 頁面歷史（stack）
         self.frame_stack = []
+        # 資料初始化
         db.create_table()
 
     # =============================
@@ -119,7 +120,7 @@ class StockApp:
             self.label_result.config(text="請輸入股票代號", fg="red")
             return
 
-        if download.insert_ticker(ticker):
+        if download.insert_ticker(ticker) and download.fetch_and_store_fundamentals(ticker):
             self.label_result.config(
                 text=f"{ticker} 已新增完成！",
                 fg="green"
@@ -163,7 +164,7 @@ class StockApp:
 
             tk.Button(
                 row,
-                text="瀏覽",
+                text="技術分析",
                 command=lambda t=ticker_name: self.view_ticker(t)
             ).pack(side=tk.LEFT, padx=5)
 
@@ -188,7 +189,7 @@ class StockApp:
     # -------------------------------
     def view_ticker(self, ticker):
         self.ticker = ticker
-        self.df = db.select_data(ticker)
+        self.df = db.select_price(ticker)
 
         # 初始化時間控制
         self.time_offset = 0  # 時間平移偏移量
@@ -212,8 +213,7 @@ class StockApp:
                   command=lambda: self.set_chart_type("price")).pack(side=tk.LEFT, padx=5)
         tk.Button(control_frame, text="本益比",
                   command=lambda: self.set_chart_type("pe")).pack(side=tk.LEFT, padx=5)
-        tk.Button(control_frame, text="營收",
-                  command=lambda: self.set_chart_type("revenue")).pack(side=tk.LEFT, padx=5)
+
 
         # ===== 時間區間控制 =====
         period_frame = tk.Frame(self.chart_frame)
@@ -322,9 +322,7 @@ class StockApp:
         elif chart_type == "pe":
             self.ax.text(0.5, 0.5, "本益比尚未實作",
                          ha="center", va="center", transform=self.ax.transAxes)
-        elif chart_type == "revenue":
-            self.ax.text(0.5, 0.5, "營收尚未實作",
-                         ha="center", va="center", transform=self.ax.transAxes)
+
 
         self.ax.set_xlabel("Date")
         self.figure.autofmt_xdate()
