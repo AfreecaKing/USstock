@@ -217,8 +217,8 @@ class StockApp:
 
         tk.Button(control_frame, text="股價走勢",
                   command=lambda: self.set_chart_type("price")).pack(side=tk.LEFT, padx=5)
-        tk.Button(control_frame, text="本益比",
-                  command=lambda: self.set_chart_type("pe")).pack(side=tk.LEFT, padx=5)
+        tk.Button(control_frame, text="漲跌幅",
+                  command=lambda: self.set_chart_type("change")).pack(side=tk.LEFT, padx=5)
 
         # ===== 時間區間控制 =====
         period_frame = tk.Frame(self.chart_frame)
@@ -314,19 +314,36 @@ class StockApp:
 
         # ===== 畫圖 =====
         if chart_type == "price":
-            self.ax.plot(df["date"], df["close"], label="收盤價", color='blue')
+            self.ax.plot(df["date"], df["close"], label="Close", color='blue')
             if 'MA20' in df:
-                self.ax.plot(df["date"], df['MA20'], label="月線(MA20)", color='orange')
+                self.ax.plot(df["date"], df['MA20'], label="MA20", color='orange')
             if 'MA60' in df:
-                self.ax.plot(df["date"], df['MA60'], label="季線(MA60)", color='green')
+                self.ax.plot(df["date"], df['MA60'], label="MA60", color='green')
 
-            self.ax.set_title(f"{self.ticker} 股價走勢 ({period})")
+            self.ax.set_title(f"{self.ticker} Price Chart ({period})")
             self.ax.set_ylabel("Price")
             self.ax.legend()
 
-        elif chart_type == "pe":
-            self.ax.text(0.5, 0.5, "本益比尚未實作",
-                         ha="center", va="center", transform=self.ax.transAxes)
+        elif chart_type == "change":
+            # Calculate daily price change percentage
+            df['daily_change'] = df['close'].pct_change() * 100
+
+            # Use colors to distinguish gains and losses
+            colors = ['red' if x > 0 else 'green' if x < 0 else 'gray'
+                      for x in df['daily_change']]
+
+            self.ax.bar(df["date"], df['daily_change'], color=colors, alpha=0.7, width=0.8)
+            self.ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+
+            self.ax.set_title(f"{self.ticker} Daily Price Change ({period})")
+            self.ax.set_ylabel("Change (%)")
+
+            # Display average change
+            avg_change = df['daily_change'].mean()
+            self.ax.text(0.02, 0.98, f"Avg: {avg_change:.2f}%",
+                         transform=self.ax.transAxes,
+                         verticalalignment='top',
+                         bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
         self.ax.set_xlabel("Date")
         self.figure.autofmt_xdate()
@@ -374,7 +391,6 @@ class StockApp:
         self.ax = self.figure.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.figure, self.fund_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-
 
         # 返回按鈕
         tk.Button(self.fund_frame, text="返回", command=self.back).pack(pady=5)
