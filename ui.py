@@ -13,11 +13,72 @@ class StockApp:
         self.root.title('Stock App')
         self.root.geometry("800x500")
 
-        # ====== 主頁 Frame ======
-        self.main_frame = tk.Frame(root)
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        # 頁面堆疊管理
+        self.frame_stack = []
+        self.current_frame = None
 
-        center_frame = tk.Frame(self.main_frame)
+        # 資料初始化
+        db.create_table()
+
+        # 顯示主頁
+        self.show_main_page()
+
+    # =============================
+    # 通用 Frame 切換（自動管理堆疊）
+    # =============================
+    def show_frame(self, new_frame):
+        """切換到新頁面，自動將當前頁面加入堆疊"""
+        if self.current_frame:
+            self.frame_stack.append(self.current_frame)
+            self.current_frame.pack_forget()
+
+        new_frame.pack(fill=tk.BOTH, expand=True)
+        self.current_frame = new_frame
+
+    def replace_frame(self, new_frame):
+        """替換當前頁面（不加入堆疊，用於重新整理頁面）"""
+        if self.current_frame:
+            self.current_frame.pack_forget()
+
+        new_frame.pack(fill=tk.BOTH, expand=True)
+        self.current_frame = new_frame
+
+    # =============================
+    # 返回上一頁（統一處理）
+    # =============================
+    def back(self):
+        """返回上一頁，如果沒有上一頁則回到主頁"""
+        if not self.frame_stack:
+            # 已經在最頂層，回到主頁
+            self.show_main_page()
+            return
+
+        # 隱藏目前頁面並銷毀
+        if self.current_frame:
+            self.current_frame.pack_forget()
+            self.current_frame.destroy()
+
+        # 回到上一頁
+        self.current_frame = self.frame_stack.pop()
+        self.current_frame.pack(fill=tk.BOTH, expand=True)
+
+    # =============================
+    # 主頁面
+    # =============================
+    def show_main_page(self):
+        """顯示主頁（清空堆疊）"""
+        # 清空堆疊
+        for frame in self.frame_stack:
+            frame.destroy()
+        self.frame_stack.clear()
+
+        if self.current_frame:
+            self.current_frame.pack_forget()
+            self.current_frame.destroy()
+
+        # 建立主頁
+        main_frame = tk.Frame(self.root)
+        center_frame = tk.Frame(main_frame)
         center_frame.pack(expand=True)
 
         tk.Button(
@@ -44,114 +105,53 @@ class StockApp:
             command=download.update_all_ticker
         ).pack(pady=10)
 
-        # 目前顯示的頁面
-        self.current_frame = self.main_frame
-        # 🔁 頁面歷史（stack）
-        self.frame_stack = []
-        # 資料初始化
-        db.create_table()
-
-    # =============================
-    # 通用 Frame 切換
-    # =============================
-    def show_frame(self, frame):
-        if self.current_frame:
-            # 🔁 把目前頁面推進 stack
-            self.frame_stack.append(self.current_frame)
-            self.current_frame.pack_forget()
-
-        frame.pack(fill=tk.BOTH, expand=True)
-        self.current_frame = frame
-
-    # =============================
-    # 通用返回主頁
-    # =============================
-    def back_to_main(self):
-        self.show_frame(self.main_frame)
-
-    # =============================
-    # 返回上一頁
-    # =============================
-    def back(self):
-        if not self.frame_stack:
-            return  # 已經是第一頁
-
-        # 隱藏目前頁面
-        self.current_frame.pack_forget()
-
-        # 回到上一頁
-        self.current_frame = self.frame_stack.pop()
-        self.current_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        self.current_frame = main_frame
 
     # =============================
     # 新增股票頁面
     # =============================
     def show_insert_page(self):
-        self.insert_frame = tk.Frame(self.root)
+        insert_frame = tk.Frame(self.root)
 
-        tk.Label(self.insert_frame, text="輸入股票代號").pack(pady=10)
+        tk.Label(insert_frame, text="輸入股票代號").pack(pady=10)
 
-        self.entry = tk.Entry(self.insert_frame)
-        self.entry.pack(pady=5)
+        entry = tk.Entry(insert_frame)
+        entry.pack(pady=5)
 
-        tk.Button(
-            self.insert_frame,
-            text="新增",
-            command=self.insert_stock
-        ).pack(pady=5)
+        label_result = tk.Label(insert_frame, text="")
+        label_result.pack(pady=10)
 
-        tk.Button(
-            self.insert_frame,
-            text="返回",
-            command=self.back_to_main
-        ).pack(pady=5)
+        def insert_stock():
+            ticker = entry.get().upper().strip()
+            if not ticker:
+                label_result.config(text="請輸入股票代號", fg="red")
+                return
 
-        self.label_result = tk.Label(self.insert_frame, text="")
-        self.label_result.pack(pady=10)
+            if download.insert_ticker(ticker) and download.fetch_and_store_fundamentals(ticker):
+                label_result.config(text=f"{ticker} 已新增完成！", fg="green")
+            else:
+                label_result.config(text="新增失敗", fg="red")
 
-        self.show_frame(self.insert_frame)
+        tk.Button(insert_frame, text="新增", command=insert_stock).pack(pady=5)
+        tk.Button(insert_frame, text="返回", command=self.back).pack(pady=5)
 
-    # =============================
-    # 新增股票動作
-    # =============================
-    def insert_stock(self):
-        ticker = self.entry.get().upper().strip()
-        if not ticker:
-            self.label_result.config(text="請輸入股票代號", fg="red")
-            return
-
-        if download.insert_ticker(ticker) and download.fetch_and_store_fundamentals(ticker):
-            self.label_result.config(
-                text=f"{ticker} 已新增完成！",
-                fg="green"
-            )
-        else:
-            self.label_result.config(
-                text="新增失敗",
-                fg="red"
-            )
+        self.show_frame(insert_frame)
 
     # =============================
     # 股票清單頁面
     # =============================
-
     def show_all_ticker_page(self):
-        self.name_frame = tk.Frame(self.root)
+        name_frame = tk.Frame(self.root)
 
-        tk.Label(
-            self.name_frame,
-            text="Stock List",
-            font=("Arial", 16)
-        ).pack(pady=10)
+        tk.Label(name_frame, text="Stock List", font=("Arial", 16)).pack(pady=10)
 
         tickers = db.get_all_tickers()
 
-        # ===== 建立可滾動的 Frame =====
-        # 外層容器
-        container = tk.Frame(self.name_frame)
+        # 建立可滾動的 Frame
+        container = tk.Frame(name_frame)
         container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Canvas + Scrollbar
         canvas = tk.Canvas(container)
         scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
         scrollable_frame = tk.Frame(canvas)
@@ -164,7 +164,7 @@ class StockApp:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        # ===== 股票列表 =====
+        # 股票列表
         for ticker in tickers:
             ticker_name = ticker[0] if isinstance(ticker, (tuple, list)) else ticker
 
@@ -183,14 +183,14 @@ class StockApp:
                 row,
                 text="基本面",
                 width=10,
-                command=lambda t=ticker_name: self.view_ticker(t)
+                command=lambda t=ticker_name: self.view_fundamentals(t)
             ).pack(side=tk.LEFT, padx=5)
 
             tk.Button(
                 row,
                 text="技術面",
                 width=12,
-                command=lambda t=ticker_name: self.view_fundamentals(t)
+                command=lambda t=ticker_name: self.view_ticker(t)
             ).pack(side=tk.LEFT, padx=5)
 
             tk.Button(
@@ -202,43 +202,31 @@ class StockApp:
                 command=lambda t=ticker_name: self.delete_ticker_ui(t)
             ).pack(side=tk.LEFT, padx=5)
 
-        # 放置 Canvas 和 Scrollbar
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # ===== 底部按鈕 =====
-        tk.Button(
-            self.name_frame,
-            text="Back",
-            width=15,
-            command=self.back_to_main
-        ).pack(pady=10)
+        tk.Button(name_frame, text="返回", width=15, command=self.back).pack(pady=10)
 
-        self.show_frame(self.name_frame)
+        self.show_frame(name_frame)
 
-    # -------------------------------
-    # 瀏覽股票 & 畫圖功能
-    # -------------------------------
+    # =============================
+    # 技術面分析頁面
+    # =============================
     def view_ticker(self, ticker):
         self.ticker = ticker
         self.df = db.select_price(ticker)
 
         # 初始化時間控制
-        self.time_offset = 0  # 時間平移偏移量
-        self.current_period = "6M"  # 預設時間區間
-        self.chart_type = "price"  # 預設圖表
+        self.time_offset = 0
+        self.current_period = "6M"
+        self.chart_type = "price"
 
-        self.chart_frame = tk.Frame(self.root)
+        chart_frame = tk.Frame(self.root)
 
-        # ===== 標題 =====
-        tk.Label(
-            self.chart_frame,
-            text=f"{ticker} chart",
-            font=("Arial", 16)
-        ).pack(pady=5)
+        tk.Label(chart_frame, text=f"{ticker} chart", font=("Arial", 16)).pack(pady=5)
 
-        # ===== 圖表類型控制 =====
-        control_frame = tk.Frame(self.chart_frame)
+        # 圖表類型控制
+        control_frame = tk.Frame(chart_frame)
         control_frame.pack(pady=5)
 
         tk.Button(control_frame, text="股價走勢",
@@ -246,8 +234,8 @@ class StockApp:
         tk.Button(control_frame, text="漲跌幅",
                   command=lambda: self.set_chart_type("change")).pack(side=tk.LEFT, padx=5)
 
-        # ===== 時間區間控制 =====
-        period_frame = tk.Frame(self.chart_frame)
+        # 時間區間控制
+        period_frame = tk.Frame(chart_frame)
         period_frame.pack(pady=5)
 
         tk.Button(period_frame, text="1M",
@@ -259,48 +247,35 @@ class StockApp:
         tk.Button(period_frame, text="ALL",
                   command=lambda: self.set_period("ALL")).pack(side=tk.LEFT, padx=3)
 
-        # ===== 上一段 / 下一段平移 =====
-        nav_frame = tk.Frame(self.chart_frame)
+        # 上一段 / 下一段平移
+        nav_frame = tk.Frame(chart_frame)
         nav_frame.pack(pady=5)
 
         tk.Button(nav_frame, text="◀ 上一段", command=self.prev_period).pack(side=tk.LEFT, padx=5)
         tk.Button(nav_frame, text="下一段 ▶", command=self.next_period).pack(side=tk.LEFT, padx=5)
 
-        # ===== 圖表顯示區 =====
+        # 圖表顯示區
         self.figure = plt.Figure(figsize=(7, 4))
         self.ax = self.figure.add_subplot(111)
 
-        self.canvas = FigureCanvasTkAgg(self.figure, self.chart_frame)
+        self.canvas = FigureCanvasTkAgg(self.figure, chart_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        # 返回上一頁
-        tk.Button(self.chart_frame, text="返回", command=self.back).pack(pady=5)
+        tk.Button(chart_frame, text="返回", command=self.back).pack(pady=5)
 
-        # 顯示頁面
-        self.show_frame(self.chart_frame)
-
-        # 預設畫圖
+        self.show_frame(chart_frame)
         self.draw_chart(self.chart_type, self.current_period)
 
-    # -------------------------------
-    # 設定圖表類型
-    # -------------------------------
     def set_chart_type(self, chart_type):
         self.chart_type = chart_type
-        self.time_offset = 0  # 每次切換圖表類型回到最新
+        self.time_offset = 0
         self.draw_chart(chart_type, self.current_period)
 
-    # -------------------------------
-    # 設定時間區間
-    # -------------------------------
     def set_period(self, period):
         self.current_period = period
-        self.time_offset = 0  # 每次切換時間區間回到最新
+        self.time_offset = 0
         self.draw_chart(self.chart_type, period)
 
-    # -------------------------------
-    # 平移上一段 / 下一段
-    # -------------------------------
     def prev_period(self):
         self.time_offset += 1
         self.draw_chart(self.chart_type, self.current_period)
@@ -310,23 +285,17 @@ class StockApp:
             self.time_offset -= 1
         self.draw_chart(self.chart_type, self.current_period)
 
-    # -------------------------------
-    # 畫圖核心
-    # -------------------------------
     def draw_chart(self, chart_type="price", period="6M"):
         self.ax.clear()
         df = self.df.copy()
 
-        # ===== 先算好 MA =====
         if len(df) >= 20:
-            df['MA20'] = df['close'].rolling(20).mean()  # 月線
+            df['MA20'] = df['close'].rolling(20).mean()
         if len(df) >= 60:
-            df['MA60'] = df['close'].rolling(60).mean()  # 季線
+            df['MA60'] = df['close'].rolling(60).mean()
 
-        # ===== 時間區間過濾 =====
         if period != "ALL":
             end_date = df["date"].max()
-            # 根據偏移量往前平移
             if period == "1M":
                 end_date -= pd.DateOffset(months=self.time_offset)
                 start_date = end_date - pd.DateOffset(months=1)
@@ -338,7 +307,6 @@ class StockApp:
                 start_date = end_date - pd.DateOffset(years=1)
             df = df[(df["date"] > start_date) & (df["date"] <= end_date)]
 
-        # ===== 畫圖 =====
         if chart_type == "price":
             self.ax.plot(df["date"], df["close"], label="Close", color='blue')
             if 'MA20' in df:
@@ -351,10 +319,7 @@ class StockApp:
             self.ax.legend()
 
         elif chart_type == "change":
-            # Calculate daily price change percentage
             df['daily_change'] = df['close'].pct_change() * 100
-
-            # Use colors to distinguish gains and losses
             colors = ['red' if x > 0 else 'green' if x < 0 else 'gray'
                       for x in df['daily_change']]
 
@@ -364,7 +329,6 @@ class StockApp:
             self.ax.set_title(f"{self.ticker} Daily Price Change ({period})")
             self.ax.set_ylabel("Change (%)")
 
-            # Display average change
             avg_change = df['daily_change'].mean()
             self.ax.text(0.02, 0.98, f"Avg: {avg_change:.2f}%",
                          transform=self.ax.transAxes,
@@ -386,15 +350,11 @@ class StockApp:
             messagebox.showinfo("無資料", f"{ticker} 尚無基本面資料")
             return
 
-        # 初始化
-        self.fund_frame = tk.Frame(self.root)
-        tk.Label(
-            self.fund_frame,
-            text=f"{ticker} Fundamentals",
-            font=("Arial", 16)
-        ).pack(pady=5)
-        # ===== 圖表切換按鈕 =====
-        control_frame = tk.Frame(self.fund_frame)
+        fund_frame = tk.Frame(self.root)
+        tk.Label(fund_frame, text=f"{ticker} Fundamentals", font=("Arial", 16)).pack(pady=5)
+
+        # 圖表切換按鈕
+        control_frame = tk.Frame(fund_frame)
         control_frame.pack(pady=5)
 
         tk.Button(control_frame, text="Revenue",
@@ -410,32 +370,20 @@ class StockApp:
                                                               is_percent=True)).pack(side=tk.LEFT, padx=3)
         tk.Button(control_frame, text="Net Margin",
                   command=lambda: self.draw_fundamental_chart(df, "net_margin", "Net Margin (%)",
-                                                              is_percent=True)).pack(
-            side=tk.LEFT, padx=3)
+                                                              is_percent=True)).pack(side=tk.LEFT, padx=3)
+
         # 圖表
         self.figure = plt.Figure(figsize=(7, 4))
         self.ax = self.figure.add_subplot(111)
-        self.canvas = FigureCanvasTkAgg(self.figure, self.fund_frame)
+        self.canvas = FigureCanvasTkAgg(self.figure, fund_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        # 返回按鈕
-        tk.Button(self.fund_frame, text="返回", command=self.back).pack(pady=5)
+        tk.Button(fund_frame, text="返回", command=self.back).pack(pady=5)
 
-        # 顯示頁面
-        self.show_frame(self.fund_frame)
-
-        # 預設顯示 Revenue
+        self.show_frame(fund_frame)
         self.draw_fundamental_chart(df, "revenue", "Revenue (Billion USD)", scale=1e-9)
 
     def draw_fundamental_chart(self, df, col, ylabel=None, scale=1, is_percent=False):
-        """
-        通用基本面柱狀圖畫法
-        df: DataFrame, 必須有 "year" 欄位
-        col: 欄位名稱 (Revenue, EPS, GrossMargin, OperatingMargin, NetMargin)
-        ylabel: Y 軸文字
-        scale: 數值縮放，例如 Revenue 用 1e-9 轉成 Billion
-        is_percent: True -> 顯示為百分比
-        """
         self.ax.clear()
 
         df = df.sort_values("year").copy()
@@ -444,22 +392,16 @@ class StockApp:
 
         bars = self.ax.bar(x, y, color="skyblue" if not is_percent else "lightgreen")
 
-        # 軸設定
         self.ax.set_xlabel("Year")
         self.ax.set_ylabel(ylabel if ylabel else col)
         self.ax.set_title(f"{self.ticker} {col}")
         self.ax.set_xticks(x)
         self.ax.set_xticklabels(x, rotation=45)
 
-        # 在柱子上顯示數值
         if col.lower() == "revenue":
-            # Revenue 顯示 YoY
-            df["yoy"] = df["revenue"].pct_change() * 100  # 百分比
+            df["yoy"] = df["revenue"].pct_change() * 100
             for bar, yoy in zip(bars, df["yoy"]):
-                if pd.isna(yoy):
-                    label = "—"
-                else:
-                    label = f"{yoy:+.1f}%"
+                label = "—" if pd.isna(yoy) else f"{yoy:+.1f}%"
                 y_pos = bar.get_height()
                 va = "bottom" if y_pos >= 0 else "top"
                 self.ax.text(
@@ -472,15 +414,8 @@ class StockApp:
                     color="red" if pd.notna(yoy) and yoy < 0 else "black"
                 )
         else:
-            # EPS / Margin 顯示實際數值
             for bar, val in zip(bars, y):
-                if pd.isna(val):
-                    label = "—"
-                else:
-                    if is_percent:
-                        label = f"{val:.2f}%"
-                    else:
-                        label = f"{val:.3f}"
+                label = "—" if pd.isna(val) else (f"{val:.2f}%" if is_percent else f"{val:.3f}")
                 y_pos = bar.get_height()
                 va = "bottom" if y_pos >= 0 else "top"
                 self.ax.text(
@@ -500,25 +435,94 @@ class StockApp:
     # 刪除股票
     # =============================
     def delete_ticker_ui(self, ticker):
-        # 確認視窗
-        if not messagebox.askyesno(
-                "確認刪除",
-                f"確定要刪除 {ticker} 的所有資料嗎？"
-        ):
+        if not messagebox.askyesno("確認刪除", f"確定要刪除 {ticker} 的所有資料嗎？"):
             return
 
-        # 執行刪除
         if db.delete_ticker(ticker):
             messagebox.showinfo("成功", f"{ticker} 已刪除")
-            # 重新整理頁面
-            self.show_all_ticker_page()
+            # 刪除成功後，重新載入股票列表頁面
+            # 先清除當前頁面
+            if self.current_frame:
+                self.current_frame.pack_forget()
+                self.current_frame.destroy()
+
+            # 重新顯示股票列表（不改變堆疊）
+            self.show_all_ticker_page_refresh()
         else:
             messagebox.showerror("失敗", f"{ticker} 刪除失敗")
 
+    def show_all_ticker_page_refresh(self):
+        """重新整理股票列表（不加入堆疊）"""
+        name_frame = tk.Frame(self.root)
 
-# =============================
-# 程式進入點
-# =============================
+        tk.Label(name_frame, text="Stock List", font=("Arial", 16)).pack(pady=10)
+
+        tickers = db.get_all_tickers()
+
+        # 建立可滾動的 Frame
+        container = tk.Frame(name_frame)
+        container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        canvas = tk.Canvas(container)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # 股票列表
+        for ticker in tickers:
+            ticker_name = ticker[0] if isinstance(ticker, (tuple, list)) else ticker
+
+            row = tk.Frame(scrollable_frame, relief=tk.RIDGE, borderwidth=1)
+            row.pack(fill=tk.X, pady=3, padx=5)
+
+            tk.Label(
+                row,
+                text=ticker_name,
+                width=15,
+                anchor="w",
+                font=("Arial", 11, "bold")
+            ).pack(side=tk.LEFT, padx=10, pady=5)
+
+            tk.Button(
+                row,
+                text="基本面",
+                width=10,
+                command=lambda t=ticker_name: self.view_fundamentals(t)
+            ).pack(side=tk.LEFT, padx=5)
+
+            tk.Button(
+                row,
+                text="技術面",
+                width=12,
+                command=lambda t=ticker_name: self.view_ticker(t)
+            ).pack(side=tk.LEFT, padx=5)
+
+            tk.Button(
+                row,
+                text="刪除",
+                width=8,
+                fg="white",
+                bg="red",
+                command=lambda t=ticker_name: self.delete_ticker_ui(t)
+            ).pack(side=tk.LEFT, padx=5)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        tk.Button(name_frame, text="返回", width=15, command=self.back).pack(pady=10)
+
+        # 直接替換當前頁面（不加入堆疊）
+        name_frame.pack(fill=tk.BOTH, expand=True)
+        self.current_frame = name_frame
+
+
 if __name__ == "__main__":
     root = tk.Tk()
     app = StockApp(root)
