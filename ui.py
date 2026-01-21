@@ -140,51 +140,77 @@ class StockApp:
 
         tk.Label(
             self.name_frame,
-            text="股票清單",
+            text="Stock List",
             font=("Arial", 16)
         ).pack(pady=10)
 
         tickers = db.get_all_tickers()
 
-        list_frame = tk.Frame(self.name_frame)
-        list_frame.pack(pady=10)
+        # ===== 建立可滾動的 Frame =====
+        # 外層容器
+        container = tk.Frame(self.name_frame)
+        container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
+        # Canvas + Scrollbar
+        canvas = tk.Canvas(container)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # ===== 股票列表 =====
         for ticker in tickers:
             ticker_name = ticker[0] if isinstance(ticker, (tuple, list)) else ticker
 
-            row = tk.Frame(list_frame)
-            row.pack(fill=tk.X, pady=2)
+            row = tk.Frame(scrollable_frame, relief=tk.RIDGE, borderwidth=1)
+            row.pack(fill=tk.X, pady=3, padx=5)
 
             tk.Label(
                 row,
                 text=ticker_name,
                 width=15,
-                anchor="w"
-            ).pack(side=tk.LEFT, padx=5)
+                anchor="w",
+                font=("Arial", 11, "bold")
+            ).pack(side=tk.LEFT, padx=10, pady=5)
 
             tk.Button(
                 row,
-                text="技術分析",
+                text="基本面",
+                width=10,
                 command=lambda t=ticker_name: self.view_ticker(t)
             ).pack(side=tk.LEFT, padx=5)
 
             tk.Button(
                 row,
-                text="基本面分析",
+                text="技術面",
+                width=12,
                 command=lambda t=ticker_name: self.view_fundamentals(t)
             ).pack(side=tk.LEFT, padx=5)
 
-            # 🔴 刪除按鈕
             tk.Button(
                 row,
                 text="刪除",
-                fg="red",
+                width=8,
+                fg="white",
+                bg="red",
                 command=lambda t=ticker_name: self.delete_ticker_ui(t)
             ).pack(side=tk.LEFT, padx=5)
 
+        # 放置 Canvas 和 Scrollbar
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # ===== 底部按鈕 =====
         tk.Button(
             self.name_frame,
-            text="返回",
+            text="Back",
+            width=15,
             command=self.back_to_main
         ).pack(pady=10)
 
