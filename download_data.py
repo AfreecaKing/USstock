@@ -38,19 +38,52 @@ def insert_ticker(ticker):  # 抓個股資料
         return True
 
 
-def update_all_ticker():
+def update_all_ticker(update_fundamentals=False):
+    """
+    更新所有股票的價格資料
+    
+    Args:
+        update_fundamentals: 是否同時更新基本面資料（預設 False，因為基本面是年度資料）
+    """
     tickers = db.get_all_tickers()
-    print(f"📈 Updating {len(tickers)} stocks")
-    for ticker in tickers:
+    print(f"📈 Updating {len(tickers)} stocks (fundamentals: {update_fundamentals})")
+    
+    success_count = 0
+    fail_count = 0
+    
+    for i, ticker in enumerate(tickers, 1):
         try:
-            print(f"🔄 Fetching {ticker} up to today")
+            print(f"[{i}/{len(tickers)}] 🔄 Updating {ticker}...", end=" ")
+            
+            # 取得最後更新日期
+            last_date = db.get_last_price_date(ticker)
+            
             ticker_obj = yf.Ticker(ticker)
-            df = ticker_obj.history(period="max")
-            fetch_and_store_fundamentals(ticker)
+            
+            # 如果有最後日期，只抓取之後的資料
+            if last_date:
+                # 從最後日期的隔天開始抓
+                from datetime import datetime, timedelta
+                start_date = (datetime.strptime(last_date, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+                df = ticker_obj.history(start=start_date)
+                
+                if df.empty:
+                    print("✓ Already up to date")
+                    success_count += 1
+                    continue
+                    
+                print(f"📥 {len(df)} new records", end=" ")
+            else:
+                # 沒有歷史資料，抓全部
+                df = ticker_obj.history(period="max")
+                print(f"📥 {len(df)} records (full history)", end=" ")
+            
             if df.empty:
-                print(f"⚠️ No data for {ticker}")
+                print("⚠️ No data available")
+                fail_count += 1
                 continue
 
+            # 處理資料格式
             df = df.reset_index()
             df['ticker'] = ticker
 
@@ -68,15 +101,31 @@ def update_all_ticker():
             df = df[['date', 'open', 'high', 'low', 'close',
                      'volume', 'dividends', 'stock_splits', 'ticker']]
             df['date'] = df['date'].dt.strftime('%Y-%m-%d')
-            # ⭐ 四捨五入兩位、volume 強制整數
+            
+            # 四捨五入兩位、volume 強制整數
             price_cols = ['open', 'high', 'low', 'close', 'dividends', 'stock_splits']
             df[price_cols] = df[price_cols].round(2)
             df['volume'] = df['volume'].astype(int)
 
             db.insert_price(df)
-            print(f"✅ {ticker} updated ({len(df)} rows total)")
+            
+            # 選擇性更新基本面
+            if update_fundamentals:
+                print("+ updating fundamentals...", end=" ")
+                fetch_and_store_fundamentals(ticker)
+            
+            print("✅")
+            success_count += 1
+            
         except Exception as e:
-            print(f"❌ {ticker} failed: {e}")
+            print(f"❌ Error: {e}")
+            fail_count += 1
+    
+    print(f"\n{'='*50}")
+    print(f"📊 Update Summary:")
+    print(f"   ✅ Success: {success_count}/{len(tickers)}")
+    print(f"   ❌ Failed: {fail_count}/{len(tickers)}")
+    print(f"{'='*50}")
 
 
 def ticker_to_cik(ticker):
@@ -140,12 +189,12 @@ def fetch_and_store_fundamentals(ticker):
             print(f"⚠️  {ticker}: No us-gaap or ifrs-full found. Available: {available_standards}")
             return True  # 回傳 True 讓股票仍可新增
 
-        # 抓年度資料
+        # 抓年度資料 - 損益表
         revenue = extract_annual_from_tags(us_gaap, [
             "SalesRevenueNet",
             "Revenues",
             "RevenueFromContractWithCustomerExcludingAssessedTax",
-            "Revenue"  # 新增通用標籤
+            "Revenue"
         ])
 
         if not revenue:
@@ -161,11 +210,49 @@ def fetch_and_store_fundamentals(ticker):
         net_income = extract_annual_from_tags(us_gaap, ["NetIncomeLoss"])
         shares = extract_annual_from_tags(us_gaap, [
             "WeightedAverageNumberOfDilutedSharesOutstanding",
-            "WeightedAverageNumberOfSharesOutstandingDiluted"  # 新增替代標籤
+            "WeightedAverageNumberOfSharesOutstandingDiluted"
         ])
 
-        # EPS
-        eps = {year: net_income[year] / shares[year] for year in net_income if year in shares and shares[year] != 0}
+        # 抓年度資料 - 現金流量表
+        operating_cash_flow = extract_annual_from_tags(us_gaap, [
+            "NetCashProvidedByUsedInOperatingActivities",
+            "CashProvidedByUsedInOperatingActivities"
+        ])
+        investing_cash_flow = extract_annual_from_tags(us_gaap, [
+            "NetCashProvidedByUsedInInvestingActivities",
+            "CashProvidedByUsedInInvestingActivities"
+        ])
+        financing_cash_flow = extract_annual_from_tags(us_gaap, [
+            "NetCashProvidedByUsedInFinancingActivities",
+            "CashProvidedByUsedInFinancingActivities"
+        ])
+        capex = extract_annual_from_tags(us_gaap, [
+            "PaymentsToAcquirePropertyPlantAndEquipment",
+            "CapitalExpendituresIncurredButNotYetPaid"
+        ])
+
+        # 抓年度資料 - 資產負債表
+        total_assets = extract_annual_from_tags(us_gaap, ["Assets"])
+        total_liabilities = extract_annual_from_tags(us_gaap, [
+            "Liabilities",
+            "LiabilitiesAndStockholdersEquity"
+        ])
+        current_liabilities = extract_annual_from_tags(us_gaap, [
+            "LiabilitiesCurrent",
+            "CurrentLiabilities"
+        ])
+        long_term_debt = extract_annual_from_tags(us_gaap, [
+            "LongTermDebtNoncurrent",
+            "LongTermDebt"
+        ])
+        stockholders_equity = extract_annual_from_tags(us_gaap, [
+            "StockholdersEquity",
+            "ShareholdersEquity"
+        ])
+
+        # 計算衍生指標
+        eps = {year: net_income[year] / shares[year] 
+               for year in net_income if year in shares and shares[year] != 0}
 
         # 毛利率 / 營業利益率 / 淨利率
         gross_margin = {year: (revenue[year] - cogs[year]) / revenue[year]
@@ -174,6 +261,14 @@ def fetch_and_store_fundamentals(ticker):
                             for year in revenue if year in operating_income and revenue[year] != 0}
         net_margin = {year: net_income[year] / revenue[year]
                       for year in revenue if year in net_income and revenue[year] != 0}
+
+        # 自由現金流 = 營運現金流 - 資本支出
+        free_cash_flow = {year: operating_cash_flow.get(year, 0) - abs(capex.get(year, 0))
+                          for year in operating_cash_flow}
+
+        # 負債比率
+        debt_to_asset_ratio = {year: total_liabilities[year] / total_assets[year]
+                               for year in total_assets if year in total_liabilities and total_assets[year] != 0}
 
         # 整理 DataFrame
         df = pd.DataFrame({
@@ -188,6 +283,16 @@ def fetch_and_store_fundamentals(ticker):
             "net_margin": [round(float(net_margin.get(y, 0)), 4) for y in revenue],
             "shares": [int(shares.get(y, 0)) for y in revenue],
             "eps": [round(float(eps.get(y, 0)), 4) for y in revenue],
+            "operating_cash_flow": [int(operating_cash_flow.get(y, 0)) for y in revenue],
+            "investing_cash_flow": [int(investing_cash_flow.get(y, 0)) for y in revenue],
+            "financing_cash_flow": [int(financing_cash_flow.get(y, 0)) for y in revenue],
+            "free_cash_flow": [int(free_cash_flow.get(y, 0)) for y in revenue],
+            "total_assets": [int(total_assets.get(y, 0)) for y in revenue],
+            "total_liabilities": [int(total_liabilities.get(y, 0)) for y in revenue],
+            "current_liabilities": [int(current_liabilities.get(y, 0)) for y in revenue],
+            "long_term_debt": [int(long_term_debt.get(y, 0)) for y in revenue],
+            "stockholders_equity": [int(stockholders_equity.get(y, 0)) for y in revenue],
+            "debt_to_asset_ratio": [round(float(debt_to_asset_ratio.get(y, 0)), 4) for y in revenue],
         })
 
         if df.empty:

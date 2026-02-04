@@ -1,7 +1,7 @@
 import tkinter as tk
 import download_data as download
 import database as db
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -62,8 +62,10 @@ class StockApp:
                   command=self.show_category_selection_page).pack(pady=10)
         tk.Button(center_frame, text="管理分類", width=15, height=2,
                   command=self.show_category_management_page).pack(pady=10)
-        tk.Button(center_frame, text="更新股票資料", width=15, height=2,
-                  command=download.update_all_ticker).pack(pady=10)
+        tk.Button(center_frame, text="快速更新股價", width=15, height=2, bg="lightblue",
+                  command=lambda: download.update_all_ticker(update_fundamentals=False)).pack(pady=10)
+        tk.Button(center_frame, text="完整更新（含基本面）", width=15, height=2, bg="lightgreen",
+                  command=lambda: download.update_all_ticker(update_fundamentals=True)).pack(pady=5)
 
         main_frame.pack(fill=tk.BOTH, expand=True)
         self.current_frame = main_frame
@@ -469,23 +471,47 @@ class StockApp:
         fund_frame = tk.Frame(self.root)
         tk.Label(fund_frame, text=f"{ticker} Fundamentals", font=("Arial", 16)).pack(pady=5)
 
-        control_frame = tk.Frame(fund_frame)
-        control_frame.pack(pady=5)
+        # 按鈕區域 - 分成兩行
+        control_frame1 = tk.Frame(fund_frame)
+        control_frame1.pack(pady=3)
 
-        tk.Button(control_frame, text="Revenue",
+        tk.Button(control_frame1, text="Revenue",
                   command=lambda: self.draw_fundamental_chart(df, "revenue", "Revenue (Billion USD)", scale=1e-9)).pack(
             side=tk.LEFT, padx=3)
-        tk.Button(control_frame, text="EPS",
+        tk.Button(control_frame1, text="EPS",
                   command=lambda: self.draw_fundamental_chart(df, "eps", "EPS (USD)")).pack(side=tk.LEFT, padx=3)
-        tk.Button(control_frame, text="Gross Margin",
+        tk.Button(control_frame1, text="Gross Margin",
                   command=lambda: self.draw_fundamental_chart(df, "gross_margin", "Gross Margin (%)",
                                                               is_percent=True)).pack(side=tk.LEFT, padx=3)
-        tk.Button(control_frame, text="Operating Margin",
+        tk.Button(control_frame1, text="Operating Margin",
                   command=lambda: self.draw_fundamental_chart(df, "operating_margin", "Operating Margin (%)",
                                                               is_percent=True)).pack(side=tk.LEFT, padx=3)
-        tk.Button(control_frame, text="Net Margin",
+        tk.Button(control_frame1, text="Net Margin",
                   command=lambda: self.draw_fundamental_chart(df, "net_margin", "Net Margin (%)",
                                                               is_percent=True)).pack(side=tk.LEFT, padx=3)
+
+        # 第二行按鈕 - 現金流和負債
+        control_frame2 = tk.Frame(fund_frame)
+        control_frame2.pack(pady=3)
+
+        tk.Button(control_frame2, text="Operating Cash Flow",
+                  command=lambda: self.draw_fundamental_chart(df, "operating_cash_flow",
+                                                              "Operating Cash Flow (Billion USD)", scale=1e-9)).pack(
+            side=tk.LEFT, padx=3)
+        tk.Button(control_frame2, text="Free Cash Flow",
+                  command=lambda: self.draw_fundamental_chart(df, "free_cash_flow",
+                                                              "Free Cash Flow (Billion USD)", scale=1e-9)).pack(
+            side=tk.LEFT, padx=3)
+        tk.Button(control_frame2, text="Cash Flow Overview",
+                  command=lambda: self.draw_cash_flow_overview(df)).pack(side=tk.LEFT, padx=3)
+        tk.Button(control_frame2, text="Total Liabilities",
+                  command=lambda: self.draw_fundamental_chart(df, "total_liabilities",
+                                                              "Total Liabilities (Billion USD)", scale=1e-9)).pack(
+            side=tk.LEFT, padx=3)
+        tk.Button(control_frame2, text="Debt Ratio",
+                  command=lambda: self.draw_fundamental_chart(df, "debt_to_asset_ratio",
+                                                              "Debt-to-Asset Ratio (%)", is_percent=True)).pack(
+            side=tk.LEFT, padx=3)
 
         self.figure = plt.Figure(figsize=(7, 4))
         self.ax = self.figure.add_subplot(111)
@@ -526,6 +552,34 @@ class StockApp:
                 va = "bottom" if y_pos >= 0 else "top"
                 self.ax.text(bar.get_x() + bar.get_width() / 2, y_pos, label,
                              ha="center", va=va, fontsize=9, color="black")
+
+        self.figure.tight_layout()
+        self.canvas.draw()
+
+    def draw_cash_flow_overview(self, df):
+        """繪製現金流總覽圖（營運、投資、融資三合一）"""
+        self.ax.clear()
+        df = df.sort_values("year").copy()
+        x = df["year"]
+
+        width = 0.25
+        x_pos = range(len(x))
+
+        operating = df["operating_cash_flow"] / 1e9
+        investing = df["investing_cash_flow"] / 1e9
+        financing = df["financing_cash_flow"] / 1e9
+
+        self.ax.bar([p - width for p in x_pos], operating, width, label='Operating', color='green', alpha=0.8)
+        self.ax.bar(x_pos, investing, width, label='Investing', color='orange', alpha=0.8)
+        self.ax.bar([p + width for p in x_pos], financing, width, label='Financing', color='red', alpha=0.8)
+
+        self.ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+        self.ax.set_xlabel("Year")
+        self.ax.set_ylabel("Cash Flow (Billion USD)")
+        self.ax.set_title(f"{self.ticker} Cash Flow Overview")
+        self.ax.set_xticks(x_pos)
+        self.ax.set_xticklabels(x, rotation=45)
+        self.ax.legend()
 
         self.figure.tight_layout()
         self.canvas.draw()

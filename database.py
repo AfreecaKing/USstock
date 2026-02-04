@@ -4,7 +4,7 @@ import os
 
 
 def create_table():
-    os.makedirs('./database', exist_ok=True)
+    os.makedirs('database', exist_ok=True)
     conn = sqlite3.connect('database/stock.db')
     cursor = conn.cursor()
 
@@ -24,7 +24,7 @@ def create_table():
             UNIQUE (ticker, date))
             ''')
 
-    # 原有的基本面表
+    # 原有的基本面表（擴充版：包含現金流和負債）
     cursor.execute('''
             CREATE TABLE IF NOT EXISTS fundamentals_annual (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,6 +39,16 @@ def create_table():
                 net_margin REAL,
                 shares REAL,
                 eps REAL,
+                operating_cash_flow REAL,
+                investing_cash_flow REAL,
+                financing_cash_flow REAL,
+                free_cash_flow REAL,
+                total_assets REAL,
+                total_liabilities REAL,
+                current_liabilities REAL,
+                long_term_debt REAL,
+                stockholders_equity REAL,
+                debt_to_asset_ratio REAL,
                 UNIQUE (ticker, year)
             )
         ''')
@@ -98,9 +108,12 @@ def insert_fundamentals(df):
     INSERT INTO fundamentals_annual (
         ticker, year, revenue, cogs, gross_margin,
         operating_income, operating_margin, net_income, net_margin,
-        shares, eps
+        shares, eps, operating_cash_flow, investing_cash_flow, 
+        financing_cash_flow, free_cash_flow, total_assets, 
+        total_liabilities, current_liabilities, long_term_debt, 
+        stockholders_equity, debt_to_asset_ratio
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(ticker, year)
     DO UPDATE SET
         revenue=excluded.revenue,
@@ -111,7 +124,17 @@ def insert_fundamentals(df):
         net_income=excluded.net_income,
         net_margin=excluded.net_margin,
         shares=excluded.shares,
-        eps=excluded.eps;
+        eps=excluded.eps,
+        operating_cash_flow=excluded.operating_cash_flow,
+        investing_cash_flow=excluded.investing_cash_flow,
+        financing_cash_flow=excluded.financing_cash_flow,
+        free_cash_flow=excluded.free_cash_flow,
+        total_assets=excluded.total_assets,
+        total_liabilities=excluded.total_liabilities,
+        current_liabilities=excluded.current_liabilities,
+        long_term_debt=excluded.long_term_debt,
+        stockholders_equity=excluded.stockholders_equity,
+        debt_to_asset_ratio=excluded.debt_to_asset_ratio;
     """
 
     data_to_insert = list(df.itertuples(index=False, name=None))
@@ -124,7 +147,12 @@ def select_fundamentals(ticker):
     conn = sqlite3.connect('database/stock.db')
     try:
         sql = """
-        SELECT ticker, year, revenue, cogs, gross_margin,operating_income, operating_margin, net_income, net_margin,shares, eps
+        SELECT ticker, year, revenue, cogs, gross_margin, operating_income, 
+               operating_margin, net_income, net_margin, shares, eps,
+               operating_cash_flow, investing_cash_flow, financing_cash_flow,
+               free_cash_flow, total_assets, total_liabilities, 
+               current_liabilities, long_term_debt, stockholders_equity,
+               debt_to_asset_ratio
         FROM fundamentals_annual
         WHERE ticker = ?
         ORDER BY year
@@ -161,6 +189,20 @@ def get_all_tickers():
     tickers = [row[0] for row in cursor.fetchall()]
     conn.close()
     return tickers
+
+
+def get_last_price_date(ticker):
+    """取得指定股票的最後價格日期"""
+    conn = sqlite3.connect('database/stock.db')
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT MAX(date)
+        FROM price_daily
+        WHERE ticker = ?
+    """, (ticker,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result[0] else None
 
 
 def delete_ticker(ticker):
